@@ -1,0 +1,28 @@
+instances: 
+
+  - name: app 
+    subnets: 
+        - subnet: 'subnet-c6e3fcad' 
+          seq_num: '01' 
+        - subnet: 'subnet-c6e3fcad' 
+          seq_num: '02' 
+        - subnet: 'subnet-a9feb4d4' 
+          seq_num: '03' 
+        - subnet: 'subnet-a9feb4d4' 
+          seq_num: '04' 
+        - subnet: 'subnet-1ed48d53' 
+          seq_num: '05' 
+        - subnet: 'subnet-1ed48d53' 
+          seq_num: '06' 
+    
+  - name: web 
+    subnets: 
+        - subnet: 'subnet-c6e3fcad' 
+          seq_num: '01' 
+          assign_public_ip: true 
+        - subnet: 'subnet-a9feb4d4' 
+          seq_num: '02' 
+          assign_public_ip: true
+        - subnet: 'subnet-1ed48d53' 
+          seq_num: '03' 
+          assign_public_ip: true 

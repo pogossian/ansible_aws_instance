@@ -1,0 +1,109 @@
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    region: eu-central-1
+    image: ami-0ac05733838eabc06
+    instance_type: t2.micro
+    group_id: sg-0765e0d43b21582a2
+    keypair: ubuntu@ansible
+  vars_files:
+    - aws_keys.yml
+    - instances.yml
+  tasks:
+  
+  - name: Create Instances
+    ec2:
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      image: "{{ image }}"
+      wait: no
+      instance_type: "{{ instance_type }}"
+      group_id:  "{{ group_id }}"
+      region: "{{ region }}"
+      keypair: "{{ keypair }}"
+      assign_public_ip: "{% if item.1.assign_public_ip is defined %}{{ item.1.assign_public_ip }}{% else %}False{% endif %}"
+      instance_tags:
+         subnet: "{{ item.1.subnet }}"
+         name: "{{ item.0.name }}-{{ item.1.seq_num }}"            
+      vpc_subnet_id: "{{ item.1.subnet }}"
+    register: ec2
+    with_subelements: 
+      - "{{ instances }}"
+      - subnets
+          
+
+  - name: Add created instances to groups
+    add_host:
+      name: "{{ item.instances.0.private_ip }}"
+      groups: 
+      - "{{ item.item.0.name }}"
+      - "{{ item.item.0.name }}-{{ item.item.1.subnet }}"
+      subnet: "{{ item.item.1.subnet }}"
+    with_items: "{{ ec2.results }}"  
+    
+          
+
+  - name: Wait for SSHs come up
+    wait_for:
+      host: "{{ item.instances.0.private_ip }}"
+      port: 22 
+      state: started 
+    with_items: "{{ ec2.results }}"
+
+
+
+- hosts: app
+  remote_user: ubuntu
+  become: yes
+  gather_facts: no
+  tasks:
+  
+   - name: Install Nginx
+     apt:
+       update_cache: yes
+       name: nginx
+       state: present       
+   - service: 
+       name: nginx
+       state: started
+       enabled: yes
+       
+       
+          
+- hosts: web
+  remote_user: ubuntu
+  become: yes
+  gather_facts: no
+  vars: 
+    appslist: "{{ hostvars[inventory_hostname]['groups']['app-' + subnet] }}"
+  tasks:
+
+   - name: Install Nginx
+     apt:
+       update_cache: yes
+       name: nginx
+       state: present       
+   - service: 
+       name: nginx
+       state: started
+       enabled: yes
+       
+       
+   - name: Copy nginx.conf on Web instances
+     copy: src=~/aws/nginx.conf dest=/etc/nginx/       
+
+
+   - name: Configuring Nginx
+     lineinfile:
+       path: /etc/nginx/nginx.conf
+       insertafter: "hire should be apps instance ips"
+       line: "        server {{ item }};"
+       firstmatch: yes
+       state: present
+     with_items: "{{ appslist }}"
+     
+
+   - service:
+       name: nginx
+       state: restarted
