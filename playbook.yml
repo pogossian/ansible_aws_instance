@@ -97,7 +97,7 @@
    - name: Configuring Nginx
      lineinfile:
        path: /etc/nginx/nginx.conf
-       insertafter: "hire should be apps instance ips"
+       insertafter: "here should be apps instance ips"
        line: "        server {{ item }};"
        firstmatch: yes
        state: present
