@@ -9,10 +9,22 @@
     keypair: ubuntu@ansible
   vars_files:
     - aws_keys.yml
-    - instances.yml
   tasks:
-  
-  - name: Create Instances
+
+  - name: Get Instances if exists
+    ec2_instance_facts:
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      region: "{{ region }}"
+      filters:
+        instance-state-name: running
+        "tag:name": "{{ item.0.name }}-{{ item.1.seq_num }}"
+    register: ec2_metadata
+    with_subelements:
+      - "{{ instances }}"
+      - subnets
+
+  - name: Create Instances if need
     ec2:
       aws_access_key: "{{ aws_access_key }}"
       aws_secret_key: "{{ aws_secret_key }}"
@@ -22,87 +34,87 @@
       group_id:  "{{ group_id }}"
       region: "{{ region }}"
       keypair: "{{ keypair }}"
-      assign_public_ip: "{% if item.1.assign_public_ip is defined %}{{ item.1.assign_public_ip }}{% else %}False{% endif %}"
+      assign_public_ip: "{% if item.item.1.assign_public_ip is defined %}{{ item.item.1.assign_public_ip }}{% else %}False{% endif %}"
       instance_tags:
-         subnet: "{{ item.1.subnet }}"
-         name: "{{ item.0.name }}-{{ item.1.seq_num }}"            
-      vpc_subnet_id: "{{ item.1.subnet }}"
+         name: "{{ item.item.0.name }}-{{ item.item.1.seq_num }}"
+      vpc_subnet_id: "{{ item.item.1.subnet }}"
     register: ec2
-    with_subelements: 
-      - "{{ instances }}"
-      - subnets
-          
-
-  - name: Add created instances to groups
-    add_host:
-      name: "{{ item.instances.0.private_ip }}"
-      groups: 
-      - "{{ item.item.0.name }}"
-      - "{{ item.item.0.name }}-{{ item.item.1.subnet }}"
-      subnet: "{{ item.item.1.subnet }}"
-    with_items: "{{ ec2.results }}"  
-    
-          
+    when: item.instances|length == 0
+    with_items: "{{ ec2_metadata.results }}"
 
   - name: Wait for SSHs come up
     wait_for:
       host: "{{ item.instances.0.private_ip }}"
-      port: 22 
-      state: started 
+      port: 22
+      state: started
+    when: item.instances is defined
     with_items: "{{ ec2.results }}"
 
+  - name: Get All Instances
+    ec2_instance_facts:
+      aws_access_key: "{{ aws_access_key }}"
+      aws_secret_key: "{{ aws_secret_key }}"
+      region: "{{ region }}"
+      filters:
+        instance-state-name: running
+        "tag:name": "{{ item.0.name }}-{{ item.1.seq_num }}"
+    register: ec2_metadata_new
+    with_subelements:
+      - "{{ instances }}"
+      - subnets
+
+  - name: Add created instances
+    add_host:
+      name: "{{ item.instances.0.private_ip_address }}"
+      groups:
+      - "{{ item.item.0.name }}"
+      - "{{ item.item.0.name }}-{{ item.instances.0.placement.availability_zone }}"
+      az: "{{ item.instances.0.placement.availability_zone }}"
+    with_items: "{{ ec2_metadata_new.results }}"
 
 
-- hosts: app
+
+- hosts: "{{ instances.0.name }}"
   remote_user: ubuntu
   become: yes
   gather_facts: no
   tasks:
-  
-   - name: Install Nginx
-     apt:
-       update_cache: yes
-       name: nginx
-       state: present       
-   - service: 
-       name: nginx
-       state: started
-       enabled: yes
-       
-       
-          
-- hosts: web
-  remote_user: ubuntu
-  become: yes
-  gather_facts: no
-  vars: 
-    appslist: "{{ hostvars[inventory_hostname]['groups']['app-' + subnet] }}"
-  tasks:
 
    - name: Install Nginx
      apt:
        update_cache: yes
        name: nginx
-       state: present       
-   - service: 
-       name: nginx
-       state: started
-       enabled: yes
-       
-       
-   - name: Copy nginx.conf on Web instances
-     copy: src=~/aws/nginx.conf dest=/etc/nginx/       
-
-
-   - name: Configuring Nginx
-     lineinfile:
-       path: /etc/nginx/nginx.conf
-       insertafter: "here should be apps instance ips"
-       line: "        server {{ item }};"
-       firstmatch: yes
        state: present
-     with_items: "{{ appslist }}"
-     
+
+   - service:
+       name: nginx
+       state: started
+       enabled: yes
+
+
+
+- hosts: "{{ instances.1.name }}"
+  remote_user: ubuntu
+  become: yes
+  gather_facts: no
+  vars:
+    appslist: "{{ hostvars[inventory_hostname]['groups'][instances.0.name + '-' + az] }}"
+  tasks:
+
+   - name: Install Nginx
+     apt:
+       update_cache: yes
+       name: nginx
+       state: present
+
+   - service:
+       name: nginx
+       state: started
+       enabled: yes
+
+   - template:
+       src: nginx.j2
+       dest: /etc/nginx/nginx.conf
 
    - service:
        name: nginx

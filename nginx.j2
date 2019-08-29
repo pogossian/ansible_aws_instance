@@ -59,8 +59,9 @@ http {
 	##
 
 	upstream apps {
-#        here should be apps instance ips
-
+	{% for eachappip in appslist %}
+		server {{ eachappip }};
+	{% endfor %}
    }
 
  	server {
