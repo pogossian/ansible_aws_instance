@@ -1,0 +1,6 @@
+region: eu-central-1
+image: ami-0ac05733838eabc06
+instance_type: t2.micro
+
+group_id: sg-0765e0d43b21582a2
+keypair: ubuntu@ansible

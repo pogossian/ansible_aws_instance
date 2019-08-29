@@ -1,14 +1,9 @@
 - hosts: localhost
   connection: local
   gather_facts: false
-  vars:
-    region: eu-central-1
-    image: ami-0ac05733838eabc06
-    instance_type: t2.micro
-    group_id: sg-0765e0d43b21582a2
-    keypair: ubuntu@ansible
   vars_files:
     - aws_keys.yml
+    - aws_vars.yml
   tasks:
 
   - name: Get Instances if exists
