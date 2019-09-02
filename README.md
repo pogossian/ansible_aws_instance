@@ -1,4 +1,4 @@
-## Automatically creating instances in AWS for web applications end load balancers
+## Automatically creating instances in AWS for web applications and load balancers
 
 *Ansible playbook should be ran from same VPC*
 
