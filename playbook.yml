@@ -4,6 +4,7 @@
   vars_files:
     - aws_keys.yml
     - aws_vars.yml
+    - instances.yml
   tasks:
 
   - name: Create Instances if need
@@ -13,15 +14,17 @@
       image: "{{ image }}"
       wait: no
       instance_type: "{{ instance_type }}"
-      group_id:  "{{ group_id }}"
+      group:  "{{ group }}"
       region: "{{ region }}"
       keypair: "{{ keypair }}"
       assign_public_ip: "{% if item.1.assign_public_ip is defined %}{{ item.1.assign_public_ip }}{% else %}False{% endif %}"
       vpc_subnet_id: "{{ item.1.subnet }}"
       instance_tags:
-        name: "{{ item.0.name }}-{{ item.1.seq_num }}"
+        name: "{{ item.0.name }}"
+        num: "{{ item.1.seq_num }}"
       count_tag:
-        name: "{{ item.0.name }}-{{ item.1.seq_num }}"
+        name: "{{ item.0.name }}"
+        num: "{{ item.1.seq_num }}"
       exact_count: 1
     register: ec2
     with_subelements:
@@ -37,6 +40,8 @@
     when: item.instances|length > 0
     with_items: "{{ ec2.results }}"
 
+
+
   - name: Get All Instances
     ec2_instance_facts:
       aws_access_key: "{{ aws_access_key }}"
@@ -45,21 +50,32 @@
       filters:
         instance-state-name: running
         vpc-id: "{{ vpc_id }}"
-        "tag:name": "{{ item.0.name }}-{{ item.1.seq_num }}"
     register: ec2_metadata
+
+
+  - name: Initialize empty list for instances
+    set_fact:
+      instanceslist: []
+
+
+  - name: Append instances list
+    set_fact:
+      instanceslist: "{{ instanceslist + [item.0.name + '-' + item.1.seq_num] }}"
     with_subelements:
       - "{{ instances }}"
       - subnets
 
+
   - name: Add created instances
     add_host:
-      name: "{{ item.instances.0.private_ip_address }}"
-      groups:
-      - whole_cluster
-      - "{% if item.item.0.name == instances.0.name %}applications{% elif item.item.0.name == instances.1.name %}loadbalancers{% endif %}"
-      - "{% if item.item.0.name == instances.0.name %}applications{% elif item.item.0.name == instances.1.name %}loadbalancers{% endif %}-{{ item.instances.0.placement.availability_zone }}"
-      az: "{{ item.instances.0.placement.availability_zone }}"
-    with_items: "{{ ec2_metadata.results }}"
+      name: "{{ item.private_ip_address }}"
+      groups: ['whole_cluster', '{{ item.tags.name }}'] 
+      az: "{{ item.placement.availability_zone }}"
+    when: 
+      - item.tags.name is defined 
+      - item.tags.num is defined
+      - item.tags.name + '-' + item.tags.num in instanceslist
+    with_items: "{{ ec2_metadata.instances }}"
 
 
 
@@ -67,28 +83,26 @@
   remote_user: ubuntu
   become: yes
   gather_facts: no
-  vars:
-    appslist: "{{ hostvars[inventory_hostname]['groups']['applications' + '-' + az] }}"
   tasks:
 
-   - name: Install Nginx
-     apt:
-       update_cache: yes
-       name: nginx
-       state: present
+  - name: Install Nginx
+    apt:
+      update_cache: yes
+      name: nginx
+      state: present
 
-   - service:
-       name: nginx
-       state: started
-       enabled: yes
+  - service:
+      name: nginx
+      state: started
+      enabled: yes
 
-   - name: Deploying nginx.conf on loadbalancers instances
-     template:
-       src: nginx.j2
-       dest: /etc/nginx/nginx.conf
-     when: "'loadbalancers' in group_names"
+  - name: Deploying nginx.conf on web instances
+    template:
+      src: nginx.j2
+      dest: /etc/nginx/nginx.conf
+    when: "'web' in group_names"
 
-   - service:
-       name: nginx
-       state: restarted
-     when: "'loadbalancers' in group_names"
+  - service:
+      name: nginx
+      state: restarted
+    when: "'web' in group_names"

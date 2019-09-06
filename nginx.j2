@@ -59,9 +59,11 @@ http {
 	##
 
 	upstream apps {
-	{% for eachappip in appslist %}
+{% for eachappip in groups['app'] %}
+	{% if hostvars[inventory_hostname]['az'] == hostvars[eachappip]['az'] %}
 		server {{ eachappip }};
-	{% endfor %}
+	{% endif %}
+{% endfor %}
    }
 
  	server {
