@@ -36,8 +36,6 @@ aws_secret_key: iMcMw4TB7cv9k+bdLqMGHKSTQIsZD43RVuSKFnUt
 
 5) And finally change sunbnets and number of in instances instances.yml
 
-  *first name in instances.yml its apps, second load balancers, also you may changed thems*
-
 
 6) Run playbook
 
